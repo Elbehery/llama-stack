@@ -4,7 +4,7 @@
 # This source code is licensed under the terms described in the LICENSE file in
 # the root directory of this source tree.
 import json
-from typing import Any
+from typing import Any, cast
 
 from tqdm import tqdm
 
@@ -12,7 +12,7 @@ from llama_stack.apis.agents import Agents, StepType
 from llama_stack.apis.benchmarks import Benchmark
 from llama_stack.apis.datasetio import DatasetIO
 from llama_stack.apis.datasets import Datasets
-from llama_stack.apis.inference import Inference, SystemMessage, UserMessage
+from llama_stack.apis.inference import Inference, SystemMessage, UserMessage, CompletionResponse, ChatCompletionResponse
 from llama_stack.apis.scoring import Scoring
 from llama_stack.providers.datatypes import BenchmarksProtocolPrivate
 from llama_stack.providers.inline.agents.meta_reference.agent_instance import (
@@ -22,7 +22,7 @@ from llama_stack.providers.utils.common.data_schema_validator import ColumnName
 from llama_stack.providers.utils.kvstore import kvstore_impl
 
 from .....apis.common.job_types import Job, JobStatus
-from .....apis.eval.eval import BenchmarkConfig, Eval, EvaluateResponse
+from .....apis.eval.eval import BenchmarkConfig, Eval, EvaluateResponse, AgentCandidate, ModelCandidate
 from .config import MetaReferenceEvalConfig
 
 EVAL_TASKS_PREFIX = "benchmarks:"
@@ -49,9 +49,9 @@ class MetaReferenceEvalImpl(
         self.agents_api = agents_api
 
         # TODO: assume sync job, will need jobs API for async scheduling
-        self.jobs = {}
+        self.jobs: dict[str, EvaluateResponse] = {}
 
-        self.benchmarks = {}
+        self.benchmarks: dict[str, Benchmark] = {}
 
     async def initialize(self) -> None:
         self.kvstore = await kvstore_impl(self.config.kvstore)
@@ -60,8 +60,8 @@ class MetaReferenceEvalImpl(
         end_key = f"{EVAL_TASKS_PREFIX}\xff"
         stored_benchmarks = await self.kvstore.values_in_range(start_key, end_key)
 
-        for benchmark in stored_benchmarks:
-            benchmark = Benchmark.model_validate_json(benchmark)
+        for benchmark_json in stored_benchmarks:
+            benchmark = Benchmark.model_validate_json(benchmark_json)
             self.benchmarks[benchmark.identifier] = benchmark
 
     async def shutdown(self) -> None: ...
@@ -108,6 +108,7 @@ class MetaReferenceEvalImpl(
         self, input_rows: list[dict[str, Any]], benchmark_config: BenchmarkConfig
     ) -> list[dict[str, Any]]:
         candidate = benchmark_config.eval_candidate
+        assert isinstance(candidate, AgentCandidate), "Expected AgentCandidate"
         create_response = await self.agents_api.create_agent(candidate.config)
         agent_id = create_response.agent_id
 
@@ -121,13 +122,12 @@ class MetaReferenceEvalImpl(
             session_create_response = await self.agents_api.create_agent_session(agent_id, f"session-{i}")
             session_id = session_create_response.session_id
 
-            turn_request = dict(
+            turn_response = [chunk async for chunk in await self.agents_api.create_agent_turn(
                 agent_id=agent_id,
                 session_id=session_id,
                 messages=input_messages,
                 stream=True,
-            )
-            turn_response = [chunk async for chunk in await self.agents_api.create_agent_turn(**turn_request)]
+            )]
             final_event = turn_response[-1].event.payload
 
             # check if there's a memory retrieval step and extract the context
@@ -151,6 +151,7 @@ class MetaReferenceEvalImpl(
         self, input_rows: list[dict[str, Any]], benchmark_config: BenchmarkConfig
     ) -> list[dict[str, Any]]:
         candidate = benchmark_config.eval_candidate
+        assert isinstance(candidate, ModelCandidate), "Expected ModelCandidate"
         assert candidate.sampling_params.max_tokens is not None, "SamplingParams.max_tokens must be provided"
 
         generations = []
@@ -158,11 +159,14 @@ class MetaReferenceEvalImpl(
             if ColumnName.completion_input.value in x:
                 input_content = json.loads(x[ColumnName.completion_input.value])
                 response = await self.inference_api.completion(
-                    model=candidate.model,
+                    model_id=candidate.model,
                     content=input_content,
                     sampling_params=candidate.sampling_params,
+                    stream=False,
                 )
-                generations.append({ColumnName.generated_answer.value: response.completion_message.content})
+                # Since stream=False, response is CompletionResponse
+                completion_response = cast(CompletionResponse, response)
+                generations.append({ColumnName.generated_answer.value: completion_response.content})
             elif ColumnName.chat_completion_input.value in x:
                 chat_completion_input_json = json.loads(x[ColumnName.chat_completion_input.value])
                 input_messages = [UserMessage(**x) for x in chat_completion_input_json if x["role"] == "user"]
@@ -175,8 +179,11 @@ class MetaReferenceEvalImpl(
                     model_id=candidate.model,
                     messages=messages,
                     sampling_params=candidate.sampling_params,
+                    stream=False,
                 )
-                generations.append({ColumnName.generated_answer.value: response.completion_message.content})
+                # Since stream=False, response is ChatCompletionResponse
+                chat_response = cast(ChatCompletionResponse, response)
+                generations.append({ColumnName.generated_answer.value: chat_response.completion_message.content})
             else:
                 raise ValueError("Invalid input row")
 
@@ -199,7 +206,7 @@ class MetaReferenceEvalImpl(
 
         # scoring with generated_answer
         score_input_rows = [
-            input_r | generated_r for input_r, generated_r in zip(input_rows, generations, strict=False)
+            input_r | generated_r for input_r, generated_r in zip(input_rows, generations, strict=True)
         ]
 
         if benchmark_config.scoring_params is not None:
