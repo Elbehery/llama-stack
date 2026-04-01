@@ -4,8 +4,6 @@
 # This source code is licensed under the terms described in the LICENSE file in
 # the root directory of this source tree.
 
-from __future__ import annotations  # for forward references
-
 import hashlib
 import json
 import os
@@ -29,7 +27,7 @@ logger = get_logger(__name__, category="testing")
 # client initialization happens in one async context, but tests run in different
 # contexts, and we need the mode/storage to persist across all contexts.
 _current_mode: str | None = None
-_current_storage: ResponseStorage | None = None
+_current_storage: "ResponseStorage | None" = None
 _original_methods: dict[str, Any] = {}
 
 # Per-test deterministic ID counters (test_id -> id_kind -> counter)
@@ -290,8 +288,8 @@ def patch_httpx_for_test_id():
 
         return None
 
-    LlamaStackClient._prepare_request = patched_prepare_request
-    OpenAI._prepare_request = patched_prepare_request
+    LlamaStackClient._prepare_request = patched_prepare_request  # type: ignore[method-assign]
+    OpenAI._prepare_request = patched_prepare_request  # type: ignore[method-assign]
 
 
 # currently, unpatch is never called
@@ -302,9 +300,9 @@ def unpatch_httpx_for_test_id():
 
     from llama_stack_client import LlamaStackClient
 
-    LlamaStackClient._prepare_request = _original_methods["llama_stack_client_prepare_request"]
+    LlamaStackClient._prepare_request = _original_methods["llama_stack_client_prepare_request"]  # type: ignore[method-assign]
     del _original_methods["llama_stack_client_prepare_request"]
-    OpenAI._prepare_request = _original_methods["openai_prepare_request"]
+    OpenAI._prepare_request = _original_methods["openai_prepare_request"]  # type: ignore[method-assign]
     del _original_methods["openai_prepare_request"]
 
 
@@ -792,6 +790,7 @@ def _patched_aiohttp_post(original_post, session_self, url: str, **kwargs):
                     "body": self._body,
                     "is_streaming": False,
                 }
+                assert _current_storage is not None, "Storage must be initialized"
                 _current_storage.store_recording(self._request_hash, request_data, response_data)
 
                 # Create a mock response that returns the captured body
@@ -917,7 +916,7 @@ async def _patched_inference_method(original_method, self, client_type, endpoint
     if "cloud.databricks.com" in url:
         url = "__databricks__" + url.split("cloud.databricks.com")[-1]
     method = "POST"
-    headers = {}
+    headers: dict[str, Any] = {}
     body = kwargs
 
     request_hash = normalize_inference_request(method, url, headers, body)
@@ -1112,11 +1111,11 @@ def patch_inference_clients():
         )
 
     # Apply OpenAI patches
-    AsyncChatCompletions.create = patched_chat_completions_create
-    AsyncCompletions.create = patched_completions_create
-    AsyncEmbeddings.create = patched_embeddings_create
-    AsyncModels.list = patched_models_list
-    AsyncResponses.create = patched_responses_create
+    AsyncChatCompletions.create = patched_chat_completions_create  # type: ignore[method-assign]
+    AsyncCompletions.create = patched_completions_create  # type: ignore[method-assign]
+    AsyncEmbeddings.create = patched_embeddings_create  # type: ignore[method-assign]
+    AsyncModels.list = patched_models_list  # type: ignore[method-assign]
+    AsyncResponses.create = patched_responses_create  # type: ignore[method-assign]
 
     # Create patched methods for Ollama client
     async def patched_ollama_generate(self, *args, **kwargs):
@@ -1150,12 +1149,12 @@ def patch_inference_clients():
         )
 
     # Apply Ollama patches
-    OllamaAsyncClient.generate = patched_ollama_generate
-    OllamaAsyncClient.chat = patched_ollama_chat
-    OllamaAsyncClient.embed = patched_ollama_embed
-    OllamaAsyncClient.ps = patched_ollama_ps
-    OllamaAsyncClient.pull = patched_ollama_pull
-    OllamaAsyncClient.list = patched_ollama_list
+    OllamaAsyncClient.generate = patched_ollama_generate  # type: ignore[method-assign]
+    OllamaAsyncClient.chat = patched_ollama_chat  # type: ignore[method-assign]
+    OllamaAsyncClient.embed = patched_ollama_embed  # type: ignore[method-assign]
+    OllamaAsyncClient.ps = patched_ollama_ps  # type: ignore[method-assign]
+    OllamaAsyncClient.pull = patched_ollama_pull  # type: ignore[method-assign]
+    OllamaAsyncClient.list = patched_ollama_list  # type: ignore[method-assign]
 
     # Create patched methods for tool runtimes
     async def patched_tavily_invoke_tool(
@@ -1166,14 +1165,14 @@ def patch_inference_clients():
         )
 
     # Apply tool runtime patches
-    TavilySearchToolRuntimeImpl.invoke_tool = patched_tavily_invoke_tool
+    TavilySearchToolRuntimeImpl.invoke_tool = patched_tavily_invoke_tool  # type: ignore[method-assign]
 
     # Create patched method for aiohttp rerank requests
     def patched_aiohttp_session_post(self, url, **kwargs):
         return _patched_aiohttp_post(_original_methods["aiohttp_post"], self, url, **kwargs)
 
     # Apply aiohttp patch
-    aiohttp.ClientSession.post = patched_aiohttp_session_post
+    aiohttp.ClientSession.post = patched_aiohttp_session_post  # type: ignore[method-assign]
 
 
 def unpatch_inference_clients():
@@ -1195,25 +1194,25 @@ def unpatch_inference_clients():
     from llama_stack.providers.remote.tool_runtime.tavily_search.tavily_search import TavilySearchToolRuntimeImpl
 
     # Restore OpenAI client methods
-    AsyncChatCompletions.create = _original_methods["chat_completions_create"]
-    AsyncCompletions.create = _original_methods["completions_create"]
-    AsyncEmbeddings.create = _original_methods["embeddings_create"]
-    AsyncModels.list = _original_methods["models_list"]
-    AsyncResponses.create = _original_methods["responses_create"]
+    AsyncChatCompletions.create = _original_methods["chat_completions_create"]  # type: ignore[method-assign]
+    AsyncCompletions.create = _original_methods["completions_create"]  # type: ignore[method-assign]
+    AsyncEmbeddings.create = _original_methods["embeddings_create"]  # type: ignore[method-assign]
+    AsyncModels.list = _original_methods["models_list"]  # type: ignore[method-assign]
+    AsyncResponses.create = _original_methods["responses_create"]  # type: ignore[method-assign]
 
     # Restore Ollama client methods if they were patched
-    OllamaAsyncClient.generate = _original_methods["ollama_generate"]
-    OllamaAsyncClient.chat = _original_methods["ollama_chat"]
-    OllamaAsyncClient.embed = _original_methods["ollama_embed"]
-    OllamaAsyncClient.ps = _original_methods["ollama_ps"]
-    OllamaAsyncClient.pull = _original_methods["ollama_pull"]
-    OllamaAsyncClient.list = _original_methods["ollama_list"]
+    OllamaAsyncClient.generate = _original_methods["ollama_generate"]  # type: ignore[method-assign]
+    OllamaAsyncClient.chat = _original_methods["ollama_chat"]  # type: ignore[method-assign]
+    OllamaAsyncClient.embed = _original_methods["ollama_embed"]  # type: ignore[method-assign]
+    OllamaAsyncClient.ps = _original_methods["ollama_ps"]  # type: ignore[method-assign]
+    OllamaAsyncClient.pull = _original_methods["ollama_pull"]  # type: ignore[method-assign]
+    OllamaAsyncClient.list = _original_methods["ollama_list"]  # type: ignore[method-assign]
 
     # Restore tool runtime methods
-    TavilySearchToolRuntimeImpl.invoke_tool = _original_methods["tavily_invoke_tool"]
+    TavilySearchToolRuntimeImpl.invoke_tool = _original_methods["tavily_invoke_tool"]  # type: ignore[method-assign]
 
     # Restore aiohttp method
-    aiohttp.ClientSession.post = _original_methods["aiohttp_post"]
+    aiohttp.ClientSession.post = _original_methods["aiohttp_post"]  # type: ignore[method-assign]
 
     _original_methods.clear()
 

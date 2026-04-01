@@ -315,7 +315,7 @@ exclude = [
     # All files now have type annotations! 🎉
     #
     # ============================================================================
-    # Section 2: Files that need strict typing issues fixed (131 files)
+    # Section 2: Files that need strict typing issues fixed (127 files)
     # ============================================================================
     # These files have some type hints but fail strict type checking due to
     # incomplete annotations, Any usage, or other strict mode violations.
@@ -443,12 +443,6 @@ exclude = [
     "^src/llama_stack/providers/utils/tools/mcp\\.py$",
     "^src/llama_stack/providers/utils/tools/ttl_dict\\.py$",
     "^src/llama_stack/providers/utils/vector_io/vector_utils\\.py$",
-    # Distributions (1 files)
-    "^src/llama_stack/distributions/template\\.py$",
-    # Other (3 files)
-    "^src/llama_stack/log\\.py$",
-    "^src/llama_stack/models/llama/sku_types\\.py$",
-    "^src/llama_stack/testing/api_recorder\\.py$",
     #
     # ============================================================================
     # Directory Excludes (35 directories)
