@@ -558,6 +558,7 @@ module = [
     "psycopg2",
     "psycopg2.extras",
     "psycopg2.extensions",
+    "sentence_transformers",
     "torchtune.*",
     "fairscale.*",
     "torchvision.*",

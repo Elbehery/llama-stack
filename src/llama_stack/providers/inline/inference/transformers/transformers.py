@@ -21,9 +21,11 @@ from llama_stack_api import (
     ModelType,
     OpenAIChatCompletion,
     OpenAIChatCompletionChunk,
+    OpenAIChatCompletionChunkWithReasoning,
     OpenAIChatCompletionContentPartImageParam,
     OpenAIChatCompletionContentPartTextParam,
     OpenAIChatCompletionRequestWithExtraBody,
+    OpenAIChatCompletionWithReasoning,
     OpenAICompletion,
     OpenAICompletionRequestWithExtraBody,
     OpenAIEmbeddingsRequestWithExtraBody,
@@ -56,7 +58,9 @@ class TransformersInferenceImpl(
     def __init__(self, config: TransformersInferenceConfig) -> None:
         self.config = config
 
-    async def openai_chat_completions_with_reasoning(self, params: OpenAIChatCompletionRequestWithExtraBody) -> None:
+    async def openai_chat_completions_with_reasoning(
+        self, params: OpenAIChatCompletionRequestWithExtraBody
+    ) -> OpenAIChatCompletionWithReasoning | AsyncIterator[OpenAIChatCompletionChunkWithReasoning]:
         raise NotImplementedError("Transformers provider does not support reasoning in chat completions")
 
     async def initialize(self) -> None:
