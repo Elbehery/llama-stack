@@ -143,14 +143,14 @@ class BuiltinEvalImpl(
                     sampling_params["stop"] = candidate.sampling_params.stop
 
                 input_content = json.loads(x[ColumnName.completion_input.value])
-                completion_params = OpenAICompletionRequestWithExtraBody(
+                params = OpenAICompletionRequestWithExtraBody(
                     model=candidate.model,
                     prompt=input_content,
                     **sampling_params,
                 )
-                completion_response = await self.inference_api.openai_completion(completion_params)
-                assert not isinstance(completion_response, AsyncIterator), "Streaming not supported in eval"
-                generations.append({ColumnName.generated_answer.value: completion_response.choices[0].text})
+                response = await self.inference_api.openai_completion(params)
+                assert not isinstance(response, AsyncIterator), "Streaming not supported in eval"
+                generations.append({ColumnName.generated_answer.value: response.choices[0].text})
             elif ColumnName.chat_completion_input.value in x:
                 chat_completion_input_json = json.loads(x[ColumnName.chat_completion_input.value])
                 input_messages = [
@@ -164,14 +164,14 @@ class BuiltinEvalImpl(
                 messages += [OpenAISystemMessageParam(**x) for x in chat_completion_input_json if x["role"] == "system"]
 
                 messages += input_messages
-                chat_params = OpenAIChatCompletionRequestWithExtraBody(
+                params = OpenAIChatCompletionRequestWithExtraBody(
                     model=candidate.model,
                     messages=messages,  # type: ignore[arg-type]
                     **sampling_params,
                 )
-                chat_response = await self.inference_api.openai_chat_completion(chat_params)
-                assert not isinstance(chat_response, AsyncIterator), "Streaming not supported in eval"
-                content = chat_response.choices[0].message.content
+                response = await self.inference_api.openai_chat_completion(params)
+                assert not isinstance(response, AsyncIterator), "Streaming not supported in eval"
+                content = response.choices[0].message.content
                 assert content is not None, "Expected content in chat response"
                 generations.append({ColumnName.generated_answer.value: content})
             else:
